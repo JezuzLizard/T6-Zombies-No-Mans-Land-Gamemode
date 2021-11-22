@@ -13,8 +13,8 @@ main() //checked matches cerberus output
 	scr_gametype = getDvar( "scr_gametype" );
 	if ( scr_gametype != "" && scr_gametype == "znml" )
 	{
-		level.onprecachegametype = ::onprecachegametype_nml;
-		level.onstartgametype = ::onstartgametype_nml;
+		level.onprecachegametype = scripts/zm/znml::onprecachegametype_nml;
+		level.onstartgametype = scripts/zm/znml::onstartgametype_nml;
 	}
 	else 
 	{
@@ -24,33 +24,6 @@ main() //checked matches cerberus output
 	level._game_module_custom_spawn_init_func = maps/mp/gametypes_zm/_zm_gametype::custom_spawn_init_func;
 	level._game_module_stat_update_func = maps/mp/zombies/_zm_stats::survival_classic_custom_stat_update;
 	maps/mp/gametypes_zm/_zm_gametype::post_gametype_main( "zstandard" );
-}
-
-onprecachegametype_nml() //checked matches cerberus output
-{
-	level.playersuicideallowed = 1;
-	level.canplayersuicide = ::canplayersuicide;
-	level.suicide_weapon = "death_self_zm";
-	precacheitem( "death_self_zm" );
-	maps/mp/zombies/_zm_ai_dogs::init();
-	maps/mp/gametypes_zm/_zm_gametype::rungametypeprecache( "zstandard" );
-}
-
-onstartgametype_nml() //checked matches cerberus output
-{
-	maps/mp/gametypes_zm/_zm_gametype::setup_classic_gametype();
-	maps/mp/gametypes_zm/_zm_gametype::rungametypemain( "zstandard", ::znml_main );
-}
-
-znml_main() //checked matches cerberus output
-{
-	level.dog_rounds_allowed = getgametypesetting( "allowdogs" );
-	if ( level.dog_rounds_allowed )
-	{
-		maps/mp/zombies/_zm_ai_dogs::enable_dog_rounds();
-	}
-	level thread maps/mp/zombies/_zm::round_start();
-	level thread maps/mp/gametypes_zm/_zm_gametype::kill_all_zombies();
 }
 
 onprecachegametype_standard() //checked matches cerberus output
