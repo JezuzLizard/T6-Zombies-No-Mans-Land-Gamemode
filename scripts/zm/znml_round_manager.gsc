@@ -1,17 +1,7 @@
-#include maps\mp\_utility;
-#include maps\mp\gametypes\_hud_util;
-#include common_scripts\utility;
-#include maps\mp\zombies\_zm_utility;
-
-onStartGameType( name )
-{
-	//disable chalk
-	level.noChalk = true;
-	level._supress_survived_screen = 1;
-	level.nml_dog_health = 100;
-
-	level thread nml_dogs_init();
-}
+#include maps/mp/_utility;
+#include maps/mp/gametypes_zm/_hud_util;
+#include common_scripts/utility;
+#include maps/mp/zombies/_zm_utility;
 
 nml_ramp_up_zombies()
 {
@@ -51,15 +41,18 @@ nml_ramp_up_zombies()
 			}
 			zombie.health = level.zombie_health;
 		}
-		level thread nml_dog_health_increase();
-		zombie_dogs = GetAISpeciesArray("axis","zombie_dog");
-		if ( IsDefined( zombie_dogs ) )
+		if ( level.can_spawn_dogs )
 		{
-			for( i = 0; i < zombie_dogs.size; i++ )
+			level thread nml_dog_health_increase();
+			zombie_dogs = GetAISpeciesArray("axis","zombie_dog");
+			if ( IsDefined( zombie_dogs ) )
 			{
-				zombie_dogs[ i ].maxhealth = int( level.nml_dog_health);
-				zombie_dogs[ i ].health = int( level.nml_dog_health );
-			}	
+				for( i = 0; i < zombie_dogs.size; i++ )
+				{
+					zombie_dogs[ i ].maxhealth = int( level.nml_dog_health);
+					zombie_dogs[ i ].health = int( level.nml_dog_health );
+				}	
+			}
 		}
 		if ( level.nml_timer == 6 )
 		{
@@ -267,7 +260,7 @@ nml_round_manager()
 			{
 				skip_dogs = 1;
 			}
-			if ( !skip_dogs && level.nml_dogs_enabled )
+			if ( !skip_dogs && is_true( level.nml_dogs_enabled ) )
 			{
 				num_dog_targets =  players.size;
 				//iPrintLn( "Num Dog Targets: " + num_dog_targets );
@@ -281,7 +274,7 @@ nml_round_manager()
 					{
 						ai = maps\mp\zombies\_zm_ai_dogs::special_dog_spawn();
 						//set their health to current level immediately.
-						zombie_dogs = GetAISpeciesArray("axis","zombie_dog");
+						zombie_dogs = GetAISpeciesArray( "axis","zombie_dog" );
 						if ( IsDefined( zombie_dogs ) )
 						{
 							for( i = 0; i < zombie_dogs.size; i++ )
