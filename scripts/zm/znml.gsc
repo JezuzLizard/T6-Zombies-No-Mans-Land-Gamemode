@@ -2,54 +2,76 @@
 #include maps/mp/gametypes_zm/_hud_util;
 #include common_scripts/utility;
 #include maps/mp/zombies/_zm_utility;
+#include scripts/zm/znml_round_manager;
+#include maps/mp/zombies/_zm_spawner;
+#include maps/mp/zombies/_zm_magicbox;
+#include maps/mp/zombies/_zm_zonemgr;
 
-onprecachegametype_nml() //checked matches cerberus output
+main()
 {
-	if ( !isDefined( level.script ) )
+	scr_gametype = getDvar( "scr_gametype" );
+	if ( scr_gametype != "" && scr_gametype == "znml" )
 	{
-		level.script = getDvar( "mapname" );
+		level.ctsm_disable_custom_perk_locations = true;
+		replaceFunc( maps/mp/zombies/_zm_utility::init_zombie_run_cycle, ::init_zombie_run_cycle_override );
+		//replaceFunc( maps/mp/zombies/_zm_spawner::do_zombie_spawn, ::do_zombie_spawn_override );
+		//replaceFunc( maps/mp/zombies/_zm_zonemgr::create_spawner_list, ::create_spawner_list_override );
+		//replaceFunc( maps/mp/zombies/_zm_zonemgr::manage_zones, ::manage_zones_override );
+		level thread on_player_connect();
+		scripts/zm/_gametype_setup::add_struct_location_gamemode_func( "zstandard", "cornfield", ::override_cornfield_perk_locations );
+		scripts/zm/_gametype_setup::add_struct_location_gamemode_func( "zstandard", "town", ::override_town_perk_locations );
 	}
-	if ( !isDefined( level.gametype ) )
-	{
-		level.gametype = getDvar( "g_gametype" );
-	}
-	if ( !isDefined( level.zm_location ) )
-	{
-		level.zm_location = getDvar( "ui_zm_mapstartlocation" );
-	}
-	level._supress_survived_screen = true;
-	level.custom_end_screen = ::nml_end_screen;
-	level.no_board_repair = true;
-	level.nml_dog_health = 100;
-	level.playersuicideallowed = false;
-	level.canplayersuicide = ::canplayersuicide;
-	level.suicide_weapon = "death_self_zm";
-	precacheitem( "death_self_zm" );
-	level.can_spawn_dogs = false;
-	switch ( level.zm_location )
-	{
-		case "town":
-		case "farm":
-		case "transit":
-			level.can_spawn_dogs = true;
-			break;
-		default:
-			break;
-	}
-	if ( level.can_spawn_dogs )
-	{
-		maps/mp/zombies/_zm_ai_dogs::init();
-	}
-	maps/mp/gametypes_zm/_zm_gametype::rungametypeprecache( level.gametype );
 }
 
-onstartgametype_nml() //checked matches cerberus output
+zombie_init_done() //checked matches cerberus output
 {
-	flag_init( "start_supersprint", 0 );
-	level.initial_spawn = true;
-	level.zombie_health = level.zombie_vars[ "zombie_health_start" ];
-	maps/mp/gametypes_zm/_zm_gametype::setup_classic_gametype();
-	maps/mp/gametypes_zm/_zm_gametype::rungametypemain( level.gametype, ::znml_main );
+	self.allowpain = 0;
+	self.electrified = 1;
+}
+
+init_zombie_run_cycle_override()
+{
+	self set_zombie_run_cycle();
+}
+
+set_zombie_run_cycle( new_move_speed ) //checked matches cerberus output
+{
+	self.zombie_move_speed_original = self.zombie_move_speed;
+	self.zombie_move_speed = new_move_speed;
+	self maps/mp/animscripts/zm_run::needsupdate();
+	self.deathanim = self maps/mp/animscripts/zm_utility::append_missing_legs_suffix( "zm_death" );
+}
+
+init() //checked matches cerberus output
+{
+	scr_gametype = getDvar( "scr_gametype" );
+	if ( scr_gametype != "" && scr_gametype == "znml" )
+	{
+		level.zombie_init_done = ::zombie_init_done;
+		level.round_spawn_func = scripts/zm/znml_round_manager::nml_round_manager;
+		level.round_wait_func = scripts/zm/znml_round_manager::round_wait;
+		zm_location = getDvar( "ui_zm_mapstartlocation" );
+		level._supress_survived_screen = true;
+		level.custom_end_screen = ::nml_end_screen;
+		level.no_board_repair = true;
+		level.nml_dog_health = 100;
+		switch ( zm_location )
+		{
+			case "town":
+			case "farm":
+			case "transit":
+				level.can_spawn_dogs = true;
+				break;
+			default:
+				level.can_spawn_dogs = false;
+				break;
+		}
+		print( "start()" );
+		flag_init( "start_supersprint", 0 );
+		level.initial_spawn = true;
+		level.zombie_health = level.zombie_vars[ "zombie_health_start" ];
+		level thread znml_main();
+	}
 }
 
 delete_trigs()
@@ -92,15 +114,17 @@ znml_main()
 	maps\mp\zombies\_zm_perks::perk_machine_removal("specialty_flakjacket");
 	maps\mp\zombies\_zm_perks::perk_machine_removal("specialty_grenadepulldeath");
 	maps\mp\zombies\_zm_perks::perk_machine_removal("specialty_nomotionsensor");
-	start_chest = getent( "start_chest", "script_noteworthy" );
-	start_chest maps/mp/zombies/_zm_magicbox::hide_chest();
+	foreach( chest in level.chests )
+	{
+		chest hide_chest();
+	}
 	level thread maps/mp/zombies/_zm_blockers::open_all_zbarriers();
 	level thread delete_trigs();
 	flag_wait( "initial_blackscreen_passed" );
 	flag_wait( "start_zombie_round_logic" );
+	level.playersuicideallowed = false;
 	flag_clear( "zombie_drop_powerups" );
 	level thread nml_ramp_up_zombies();
-	level thread nml_round_manager();
 	if ( level.can_spawn_dogs )
 	{
 		level thread nml_dogs_init();
@@ -114,21 +138,6 @@ on_player_connect()
 	{
 		level waittill( "connected", player );
 		player.hunted_by = false;
-		player thread on_player_spawned();
-	}
-}
-
-on_player_spawned()
-{
-	while ( true )
-	{
-		self waittill( "spawned_player" );
-		lethal_grenade = self get_player_lethal_grenade();
-		if ( !self hasweapon( lethal_grenade ) )
-		{
-			self giveweapon( lethal_grenade );
-			self setweaponammoclip( lethal_grenade, 2 );
-		}
 	}
 }
 
@@ -140,6 +149,7 @@ on_end_game()
 
 nml_end_screen()
 {
+	players = getPlayers();
 	for ( i = 0; i < players.size; i++ )
 	{
 		game_over[ i ] = newclienthudelem( players[ i ] );
@@ -173,5 +183,30 @@ nml_end_screen()
 		survived[ i ] settext( "You survived for ", player_survival_time_in_mins );
 		survived[ i ] fadeovertime( 1 );
 		survived[ i ].alpha = 1;
+	}
+}
+
+override_cornfield_perk_locations()
+{
+	scripts/zm/_gametype_setup::register_perk_struct( "specialty_armorvest", "zombie_vending_jugg", ( 0, 260.2, 0 ), ( 10355.1, -1507.9, -213.3 ) );
+	scripts/zm/_gametype_setup::register_perk_struct( "specialty_fastreload", "zombie_vending_sleight", ( 0, 21.8, 0 ), ( 9944.8, -121.7, -211 ) );
+	scripts/zm/_gametype_setup::register_perk_struct( "specialty_weapupgrade", "p6_anim_zm_buildable_pap_on", ( 0, 270, 0), ( 12221.1, -719, -131.5 ) );
+}
+
+override_town_perk_locations()
+{
+	// scripts/zm/_gametype_setup::register_perk_struct( "specialty_armorvest", "zombie_vending_jugg", ( 0, 2.5, 0 ), ( 1967 -1297.8, -54.2 ) );
+	// scripts/zm/_gametype_setup::register_perk_struct( "specialty_fastreload", "zombie_vending_sleight", ( 0, 270, 0 ), ( 2098, -1428.5, -56 ) );
+	structs = getstructarray( "zm_perk_machine", "targetname" );
+	foreach ( struct in structs )
+	{
+		if ( struct.script_string == "zstandard_perks_town" )
+		{
+			struct.script_string = "zremove_perks_town";
+		}
+		else if ( struct.script_string == "znml_perks_town" )
+		{
+			struct.script_string = "zstandard_perks_town";
+		}
 	}
 }
